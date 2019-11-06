@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<component name="Player" extends="Component">
+
+  <script type="text/brightscript" uri="player.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/connect.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/actions/player.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/actions/playermetadata.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/actions/history.brs" />
+  <script type="text/brightscript" uri="pkg:/components/tasks/lib/fetch.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/device.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/max.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/time.brs" />
+
+  <children>
+    <Video
+      id="video"
+      width="1920"
+      height="1080"
+      translation="[0,0]"
+      enableUI="false"
+      notificationInterval="1"
+    />
+
+    <PlayerOverlay id="overlay" />
+
+    <PlayerAdBug
+      id="adbug"
+      translation="[0,0]"
+    />
+
+    <PlayerAnalytics id="playeranalytics" />
+  </children>
+</component>

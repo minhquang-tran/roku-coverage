@@ -1,0 +1,59 @@
+m.global.testCoverage =
+{
+  "input2.brs": [true, invalid, ....] '-> % covered
+  "input1.brs": [true, invalid, ....]
+}
+
+TEST_COVERAGE_LINES_COVERED_INDEX = 0
+TEST_COVERAGE_LINES_TOTAL_INDEX = 1
+m.global.testCoverageReport["input2.brs"][TEST_COVERAGE_LINES_COVERED_INDEX]
+
+m.global.testCoverageReport =
+{
+  "input2.brs": {
+    linesCovered: 57 #if <> invalid
+    lines: 250 '#size
+  }
+  "input1.brs": {
+    linesCovered: 320
+    lines: 400
+  }
+}
+
+->
+=================================================================
+===   input2.brs suite:
+===
+===   Total  = 250 ; Covered  =  57 ; Uncovered   =  193 ; Coverage(%): 57/250*100
+=================================================================
+=================================================================
+===   input1.brs suite:
+===
+===   Total  = ..250 ; Covered  =  57 ; Uncovered   =  193 ; Coverage(%): 57/250*100
+=================================================================
+
+***
+***   Total  = 540 ; Covered  =  377 ; Uncovered   =  193 ; Coverage(%): 57/250*100
+***
+******************************************************************
+*************             End report                 *************
+******************************************************************
+******************************************************************
+
+///////////////////////////////////
+sub init()
+m.global.testCoverage["input2.brs"] = CreateObject("roArray", #size, false)
+m.global.testCoverage["input2.brs"][0] = true
+-------
+  signalBeacon("EPGLaunchInitiate")
+
+m.global.testCoverage["input2.brs"][1] = true
+-------
+  m.components.append({
+    border: m.top.findNode("border")
+    debounceLoad: m.top.findNode("debounceLoad")
+    debouncePersistState: m.top.findNode("debouncePersistState")
+    inner: m.top.findNode("inner")
+    loading: m.top.findNode("loading")
+  })
+

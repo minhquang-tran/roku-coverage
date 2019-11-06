@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<component name="PlayerScrubber" extends="Component">
+  <interface>
+    <field id="launchingToLive" type="boolean" value="false" />
+  </interface>
+
+  <interface>
+    <function name="handleTransport" />
+  </interface>
+
+  <script type="text/brightscript" uri="player-scrubber.brs" />
+
+  <script type="text/brightscript" uri="player-scrubber/ads.brs" />
+  <script type="text/brightscript" uri="player-scrubber/seek.brs" />
+  <script type="text/brightscript" uri="player-scrubber/steps.brs" />
+  <script type="text/brightscript" uri="player-scrubber/timeline.brs" />
+  <script type="text/brightscript" uri="player-scrubber/watched.brs" />
+
+  <script type="text/brightscript" uri="pkg:/components/store/connect.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/actions/player.brs" />
+  <script type="text/brightscript" uri="pkg:/components/store/actions/history.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/array.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/bsbs.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/device.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/logging.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/max.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/min.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/on-key-event.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/range.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/thumbnails.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/time.brs" />
+
+  <children>
+    <Rectangle
+      id="thumbnailPosterContainer"
+      translation="[0,-126]"
+      width="260"
+      height="140"
+      color="0x00000000"
+    >
+      <Rectangle
+        id="leftSideThumbnailRectangle1"
+        translation="[-342, -300]"
+        width="505"
+        height="289"
+        color="0x000000FF"
+        opacity="0.2"
+      />
+      <Rectangle
+        id="leftSideThumbnailRectangle2"
+        translation="[173, -300]"
+        width="505"
+        height="289"
+        color="0x000000FF"
+        opacity="0.2"
+      />
+      <Rectangle
+        id="rightSideThumbnailRectangle1"
+        translation="[985, -300]"
+        width="505"
+        height="289"
+        color="0x000000FF"
+        opacity="0.2"
+      />
+      <Rectangle
+        id="rightSideThumbnailRectangle2"
+        translation="[1500, -300]"
+        width="505"
+        height="289"
+        color="0x000000FF"
+        opacity="0.2"
+      />
+      <Rectangle
+        id="mainThumbnailRectangle"
+        translation="[509, -340]"
+        width="645"
+        height="369"
+        color="0x000000FF"
+        opacity="0.2"
+      />
+
+      <Poster
+        id="leftSideThumbnailPoster0"
+        translation="[-857, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+      <Poster
+        id="leftSideThumbnailPoster1"
+        translation="[-342, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+      <Poster
+        id="leftSideThumbnailPoster2"
+        translation="[173, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+      <Poster
+        id="rightSideThumbnailPoster1"
+        translation="[985, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+      <Poster
+        id="rightSideThumbnailPoster2"
+        translation="[1500, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+      <Poster
+        id="rightSideThumbnailPoster3"
+        translation="[2015, -300]"
+        width="505"
+        height="289"
+        opacity="0.4"
+      />
+
+      <Poster
+        id="mainThumbnailPoster"
+        translation="[509, -340]"
+        width="645"
+        height="369"
+      />
+    </Rectangle>
+
+    <Poster
+      id="startOver"
+      height="72"
+      width="253"
+      translation="[0, -604]"
+      uri="pkg:/images/$$RES$$/button-startover-longpress-default.png"
+    />
+    <Poster
+      id="jumpToLive"
+      height="72"
+      width="276"
+      translation="[1437, -604]"
+      uri="pkg:/images/$$RES$$/button-jumptolive-longpress-default.png"
+    />
+
+    <Rectangle
+      id="playMode"
+      translation="[767,-351]"
+    >
+      <Poster
+        id="playModeImage"
+        width="140"
+        height="140"
+        blendColor="0xffffffBF"
+        uri="pkg:/images/$$RES$$/icon-pause.png"
+      />
+
+      <Text
+        id="modeLabel"
+        width="140"
+        translation="[-5,150]"
+        horizAlign="center"
+        text=""
+        color="0xddddddff"
+        size="32"
+      />
+    </Rectangle>
+
+    <Rectangle
+      id="backgroundBar"
+      color="0xFFFFFF26"
+      width="1664"
+      height="9"
+      translation="[0,0]"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="availableBar"
+      width="0"
+      height="9"
+      translation="[0,0]"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="positionBar"
+      width="0"
+      height="9"
+      translation="[0,0]"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="adBreaks"
+      color="0x000000A6"
+      width="0"
+      height="6"
+      translation="[0,1]"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="watchedRanges"
+      color="0x000000A6"
+      width="0"
+      height="9"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="liveHead"
+      color="0x808080FF"
+      width="2"
+      height="24"
+      translation="[0,-8]"
+      visible="false"
+    >
+    </Rectangle>
+
+    <Rectangle
+      id="playhead"
+      color="0xFFFFFFFF"
+      width="2"
+      height="24"
+      translation="[0,-8]"
+    >
+      <Text
+        id="playheadPosition"
+        color="0xFFFFFF80"
+        horizAlign="center"
+        size="32"
+        translation="[-105,-50]"
+        width="210"
+      />
+    </Rectangle>
+
+    <Text
+      id="position"
+      width="210"
+      height="40"
+      translation="[0,31]"
+      horizAlign="left"
+      vertAlign="bottom"
+      color="0xFFFFFF80"
+      size="32"
+    />
+
+    <Text
+      id="remaining"
+      width="210"
+      height="40"
+      translation="[1454,31]"
+      horizAlign="right"
+      vertAlign="bottom"
+      color="0xFFFFFF80"
+      size="32"
+    />
+
+    <Timer
+      id="clockInterval"
+      duration="1"
+      repeat="true"
+    />
+    <Timer
+      id="jumpTrackingTimeout"
+      duration="30"
+    />
+    <Timer
+      id="reportPlayheadInterval"
+      duration="10"
+      repeat="true"
+    />
+    <Timer
+      id="updateSeekPositionInterval"
+      duration="0.1"
+      repeat="true"
+    />
+    <Timer
+      id="updateSeekStepInterval"
+      duration="1"
+      repeat="true"
+    />
+    <Timer
+      id="removeFfDisabledIndicator"
+      duration="1"
+    />
+  </children>
+</component>
