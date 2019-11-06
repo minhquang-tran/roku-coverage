@@ -22,10 +22,10 @@ def transform_func(comp_name, function, start_index):
       continue
 
     j = i + 1
-    while not is_balanced(block):      
+    while not is_balanced(block):
       block += "\n" + lines[j]
       j += 1
-      
+
     i = j
     blocks.append(block)
 
@@ -63,7 +63,7 @@ def transform_component(comp_name):
       function.append(lines[j])
       functions.append("\n".join(function))
       i = j
-      
+
     i += 1
 
   line_num = 0
@@ -78,15 +78,32 @@ def transform_component(comp_name):
   insert_index = init_func.index("\n")
   init_out = init_func[:insert_index] + comp_init + init_func[insert_index:]
   txt = txt.replace(init_func, init_out)
-  
+
   return txt
 
 # MAIN
-comp_name = "input.brs"
-output = transform_component(comp_name)
+# comp_name = "input.brs"
+# output = transform_component(comp_name)
 
-out_file = open("output.brs", "w")
-out_file.write(output)
-out_file.close()
+# out_file = open("output.brs", "w")
+# out_file.write(output)
+# out_file.close()
 
-print("Done!")
+# print("Done!")
+
+import sys, os
+input_path = sys.argv[1]
+# print("input path: ", input_path)
+output_path = input_path + "-coverage"
+# print("output path :", output_path, os.path.exists(output_path))
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
+
+
+from distutils.dir_util import copy_tree
+
+# copy subdirectory example
+fromDirectory = input_path
+toDirectory = output_path
+
+copy_tree(fromDirectory, toDirectory)
