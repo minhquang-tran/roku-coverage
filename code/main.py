@@ -82,7 +82,7 @@ def transform_component(comp_file):
 
     return txt
 
-# MAIN
+# SAMPLE USES
 # comp_name = "input.brs"
 # output = transform_component(comp_name)
 
@@ -95,7 +95,7 @@ def transform_component(comp_file):
 # read input & create directory
 import sys, os
 # project_dir = sys.argv[1]
-project_dir = "./code/lofi-protoman"
+project_dir = "./lofi-protoman"
 
 coverage_dir = project_dir + "-coverage"
 if not os.path.exists(coverage_dir):
@@ -106,31 +106,34 @@ from distutils.dir_util import copy_tree
 copy_tree(project_dir, coverage_dir)
 
 #get list of copied files
+components_dir = os.path.join(coverage_dir, "components")
 component_files = []
 main_file = None
-for root, dirs, files in os.walk(coverage_dir):
-    print(root, dirs, files)
+for root, dirs, files in os.walk(components_dir):
     if "test" in root:
         continue
     for name in files:
-        print(name)
-
         if name == "main.brs":
             main_file = os.path.join(root, name)
         elif name.endswith(".brs"):
             component_files.append(os.path.join(root, name))
 
 
-for component in component_files:
-    output = transform_component(component)
-    if not output:
-        continue
-    # print(component)
-    # print(output)
-    out_file = open(component, "w")
-    out_file.write(output)
-    out_file.close()
-    # print()
-    # out_file = open("output.brs", "w")
+# for component in component_files:
+#     print(component)
+    # output = transform_component(component)
+    # if not output:
+    #     continue
+    # out_file = open(component, "w")
     # out_file.write(output)
     # out_file.close()
+
+from itertools import groupby
+
+# for key, comp in groupby(component_files, lambda f: f.split("/")[4].split(".")[0]):
+#     print(key, list(comp))
+
+components = [(key, list(group)) for key, group in groupby(component_files, lambda f: f.split("/")[4].split(".")[0])]
+
+for c in components:
+    print(c)
