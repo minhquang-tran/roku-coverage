@@ -12,9 +12,9 @@ sub main(params = {} as object)
     launchParams: {},
     restart: false,
     utmParams: {}
-    testCoverage: {}
-    testCoverageReport: {}
   })
+
+' <Test Coverage: add new global fields here> '
 
   ' createObject("roRegistry").delete("Auth") 'Uncomment me to force re-auth every launch
   appInfo = createObject("roAppInfo")
@@ -30,13 +30,13 @@ sub main(params = {} as object)
   end if
 
   if env = "DEVELOPMENT"
-    appID = "philodev"
+    appID = "lofidev"
     debug = true
   end if
   isTestMode = params.RunTests <> invalid and params.RunTests = "true" and type(TestRunner) = "Function"
 
   if NOT isTestMode then '\\Print-export-here'
-    'Print/export test coverage'
+' <Test Coverage: print report here> '
     return
   end if
 

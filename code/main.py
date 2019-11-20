@@ -1,6 +1,28 @@
 COVERAGE_INIT = "\nm.global.testCoverage[\"{}\"] = CreateObject(\"roArray\", {}, false)"
 COVERAGE_LINE = "m.global.testCoverage[\"{}\"][{}] = true"
 
+MAIN_COVERAGE_LINES = r"""m.global.addFields({
+    testCoverage: {}
+    testCoverageReport: {}
+  })"""
+
+REPORT_COVERAGE_LINES = r"""    for component in m.global.testCoverage
+        uncoveredLines = []
+        linesCount = component.count()
+        for i in linesCount
+            if component[i] <> true
+                uncoveredLines.pop(i)
+            end if
+        end for
+        coveredCount = linesCount - uncoveredLines.count()
+        coveragePercent = (coveredCount / linesCount * 100).toStr()
+        ?"================================================================="
+        ?substitute("===   Component {} Test Suite:", component)
+        ?"==="
+        ?substitute("===   Total  = {} ; Covered  =  {} ; Uncovered   =  {} ; Coverage: {}%", linesCount, coveredCount, uncoveredLines.count(), coveragePercent)
+        ?"================================================================="
+    end for"""
+
 def is_balanced(block):
     if block.count("(") != block.count(")"):
         return False
@@ -63,15 +85,13 @@ def transform_func(comp_name, function, start_index):
 def transform_component(component):
     component_name, component_files = component
     component_files.sort()
-    print("Component: " + component_name)
+    print("------------------------\nTransforming component: " + component_name)
 
     component_texts = list(map(lambda f: open(f, 'r').read(), component_files))
     if not any("sub init()" in txt for txt in component_texts):
         # No init() function
         print("WARNING: No init() function found.")
         return None
-
-    # print(component_files)
 
     line_num = 0
     init_function = None
@@ -98,55 +118,13 @@ def transform_component(component):
         with open(component_file, 'w') as file_object:
             file_object.write(component_text)
 
-    # f = open(comp_file, 'r')
-    # txt = f.read()
-    # comp_name = os.path.basename(comp_file)
-    # if "sub init()" not in txt:
-    #     # No init() function
-    #     return None
+def transform_main(main_file):
+    main_text = open(main_file, 'r').read()
+    main_text = main_text.replace("' <Test Coverage: add new global fields here> '", MAIN_COVERAGE_LINES)
+    main_text = main_text.replace("' <Test Coverage: print report here> '", REPORT_COVERAGE_LINES)
+    with open(main_file, 'w') as file_object:
+            file_object.write(main_text)
 
-    # lines = txt.split("\n")
-
-    # functions = []
-    # i = 0
-    # while i < len(lines):
-    #     if lines[i].startswith("sub") or lines[i].startswith("function"):
-    #         function = [lines[i]]
-    #         j = i + 1
-    #         while not (lines[j].endswith("end sub") or lines[j].endswith("end function")):
-    #             function.append(lines[j])
-    #             j += 1
-
-    #         function.append(lines[j])
-    #         functions.append("\n".join(function))
-    #         i = j
-
-    #     i += 1
-
-    # line_num = 0
-    # for function in functions:
-    #     if function.startswith("sub init()"):
-    #         init_func = function
-    #     else:
-    #         out, line_num = transform_func(comp_name, function, line_num)
-    #         txt = txt.replace(function, out)
-
-    # comp_init = COVERAGE_INIT.format(comp_name, line_num)
-    # insert_index = init_func.index("\n")
-    # init_out = init_func[:insert_index] + comp_init + init_func[insert_index:]
-    # txt = txt.replace(init_func, init_out)
-
-    # return txt
-
-# SAMPLE USES
-# comp_name = "input.brs"
-# output = transform_component(comp_name)
-
-# out_file = open("output.brs", "w")
-# out_file.write(output)
-# out_file.close()
-
-# print("Done!")
 
 # read input & create directory
 import sys, os
@@ -165,34 +143,24 @@ from distutils.dir_util import copy_tree
 copy_tree(project_dir, coverage_dir)
 
 #get list of copied files
-components_dir = os.path.join(coverage_dir, "components")
+# components_dir = os.path.join(coverage_dir, "components")
 component_files = []
 main_file = None
-for root, dirs, files in os.walk(components_dir):
-    if "test" in root:
+for root, dirs, files in os.walk(coverage_dir):
+    if "tests" in root:
         continue
     for name in files:
-        if name == "main.brs":
+        if "source" in root and name == "main.brs":
             main_file = os.path.join(root, name)
-        elif name.endswith(".brs"):
+        elif "components" in root and name.endswith(".brs"):
             component_files.append(os.path.join(root, name))
-
-
-# for component in component_files:
-#     print(component)
-    # output = transform_component(component)
-    # if not output:
-    #     continue
-    # out_file = open(component, "w")
-    # out_file.write(output)
-    # out_file.close()
+component_files.sort()
 
 from itertools import groupby
 
-# for key, comp in groupby(component_files, lambda f: f.split("/")[4].split(".")[0]):
-#     print(key, list(comp))
 components = [(key, list(group)) for key, group in groupby(component_files, lambda f: f.split("/")[4].split(".")[0])]
 
 for c in components:
     # print(c)
     transform_component(c)
+transform_main(main_file)

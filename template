@@ -1,3 +1,8 @@
+m.global.addFields({
+    testCoverage: {}
+    testCoverageReport: {}
+})
+
 m.global.testCoverage =
 {
   "input2.brs": [true, invalid, ....] '-> % covered
@@ -19,6 +24,24 @@ m.global.testCoverageReport =
     lines: 400
   }
 }
+
+for component in m.global.testCoverage
+    uncoveredLines = []
+    linesCount = component.count()
+    for i in linesCount
+        if component[i] <> true
+            uncoveredLines.pop(i)
+        end if
+    end for
+    coveredCount = linesCount - uncoveredLines.count()
+    coveragePercent = (coveredCount / linesCount * 100).toStr()
+    ?"================================================================="
+    ?substitute("===   Component {} Test Suite:", component)
+    ?"==="
+    ?substitute("===   Total  = {} ; Covered  =  {} ; Uncovered   =  {} ; Coverage: {}%", linesCount, coveredCount, uncoveredLines.count(), coveragePercent)
+    ?"================================================================="
+end for
+
 
 ->
 =================================================================
