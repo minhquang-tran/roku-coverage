@@ -39,6 +39,14 @@ for component in m.global.testCoverage
     ?substitute("===   Component {} Test Suite:", component)
     ?"==="
     ?substitute("===   Total  = {} ; Covered  =  {} ; Uncovered   =  {} ; Coverage: {}%", linesCount, coveredCount, uncoveredLines.count(), coveragePercent)
+    if uncoveredLines.count() > 0
+        uncoveredLinesString = "===   Uncovered Line(s): "
+        for each line in uncoveredLines
+            uncoveredLinesString += " " + str(line) + ", "
+        end for
+        uncoveredLinesString = left(uncoveredLinesString, len(uncoveredLinesString) - 2)
+        ?uncoveredLinesString
+    end if
     ?"================================================================="
 end for
 
@@ -53,6 +61,7 @@ end for
 ===   input1.brs suite:
 ===
 ===   Total  = ..250 ; Covered  =  57 ; Uncovered   =  193 ; Coverage(%): 57/250*100
+===   Uncovered Lines: 12, 56, 89, 12, 
 =================================================================
 
 ***
@@ -80,3 +89,16 @@ m.global.testCoverage["input2.brs"][1] = true
     loading: m.top.findNode("loading")
   })
 
+export ROKU_DEV_TARGET=192.168.2.89
+export DEVPASSWORD=aaaa
+cd /Users/eastagile/code/roku-prototype
+make install
+
+curl -X POST http://192.168.2.89:8060/launch/dev\?RunTests\=true
+
+sub animated_markTestCoverage(componentName As String, index)
+  componentCoverage = m.global.testCoverage[componentName]
+  componentCoverage[index] = true
+  m.global.testCoverage[componentName] = componentCoverage
+end sub
+markTestCoverage("animated", 0)
