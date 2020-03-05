@@ -1,7 +1,8 @@
-MAIN_INIT_MARK = "' <Test Coverage: add new global fields here> '"
-MAIN_REPORT_MARK = "' <Test Coverage: print report here> '"
-
 MARK_TEST_FUNC = """sub {0}_markTestCoverage(index)
+  'if m.global.testCoverage.{0} = invalid
+  'm.global.testCoverage.addFields({{{0}: createobject("roSGNode","ContentNode")}})
+  'm.global.testCoverage.{0}.addFields({{"length":{1}}})
+  'end if
   index = index.toStr()
   fields = {{}}
   fields[index] = true
@@ -77,10 +78,10 @@ def to_function_list(brs_text):
     functions = []
     i = 0
     while i < len(lines):
-        if lines[i].lower().startswith("sub") or lines[i].lower().startswith("function"):
+        if lines[i].startswith("sub") or lines[i].startswith("function"):
             function = [lines[i]]
             j = i + 1
-            while not (lines[j].lower().startswith("end sub") or lines[j].lower().startswith("end function")):
+            while not (lines[j].endswith("end sub") or lines[j].endswith("end function")):
                 function.append(lines[j])
                 j += 1
 
@@ -91,13 +92,13 @@ def to_function_list(brs_text):
         i += 1
     return functions
 
-def transform_func(component_name, function, start_index):
+def transform_func(comp_name, function, start_index):
     lines = function.split("\n")
     blocks = []
     i = 0
     while i < len(lines):
         block = lines[i]
-        if not lines[i].strip() or lines[i].strip().lower().startswith(("'","else","end")):
+        if not lines[i].strip() or lines[i].strip().startswith(("'","end")):
             blocks[-1] += "\n" + block
             i += 1
             continue
@@ -113,7 +114,7 @@ def transform_func(component_name, function, start_index):
     blocks_count = len(blocks)
     end_index = start_index + blocks_count - 1
 
-    insert_lines = [COVERAGE_LINE.format(component_name, i) for i in range(start_index, end_index)]
+    insert_lines = [COVERAGE_LINE.format(comp_name, i) for i in range(start_index, end_index)]
 
     out_blocks = [None] * (blocks_count * 2 - 1)
     out_blocks[::2] = blocks
@@ -127,7 +128,7 @@ def transform_component(component):
     print("------------------------\nTransforming component: " + component_name)
 
     component_texts = list(map(lambda f: open(f, 'r').read(), component_files))
-    if not any("sub init()" in txt.lower() for txt in component_texts):
+    if not any("sub init()" in txt for txt in component_texts):
         # No init() function
         print("WARNING: No init() function found.")
         return None
@@ -138,7 +139,7 @@ def transform_component(component):
         component_text = component_texts[i]
         function_list = to_function_list(component_text)
         for function in function_list:
-            if function.lower().startswith("sub init()"):
+            if function.startswith("sub init()"):
                 component_main_index = i
             else:
                 transformed_function, line_num = transform_func(component_name, function, line_num)
@@ -161,8 +162,8 @@ def transform_main(main_file):
     map_func = lambda c: MAIN_COMPONENT_LINES.format(c[0], c[2])
     components_text = "\n".join(map(map_func, filter(filter_func, components)))
     main_text = open(main_file, 'r').read()
-    main_text = main_text.replace(MAIN_INIT_MARK, MAIN_COVERAGE_LINES + "\n" + components_text)
-    main_text = main_text.replace(MAIN_REPORT_MARK, REPORT_COVERAGE_LINES)
+    main_text = main_text.replace("' <Test Coverage: add new global fields here> '", MAIN_COVERAGE_LINES + "\n" + components_text)
+    main_text = main_text.replace("' <Test Coverage: print report here> '", REPORT_COVERAGE_LINES)
     with open(main_file, 'w') as file_object:
             file_object.write(main_text)
 
