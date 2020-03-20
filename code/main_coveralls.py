@@ -13,74 +13,89 @@ def is_balanced(block):
     return True
 
 
-def should_add_into_current_block(line, code_block):
+def should_add_into_current_block(code_block):
     # CASES:
-    #   Empty line
+    #   Empty line & comments: handled by transforming function
     #   Imbalanced blocks
     #   After init() function until after next function
-    #   Before last line of function until after next function
+    #   Before last line of function until after next function: handled by transforming function
     if not is_balanced(code_block):
         return True
-    if not line.strip():
+
+    block_last_line = code_block.split("\n")[-1]
+    if "sub init()" in code_block:
+        if block_last_line.strip() == "sub init()":
+            return True
+        if block_last_line.strip().startswith(("sub", "function")):
+            return False
         return True
-    if line.strip().startswith(("'", "else", "end", "sub", "function")):
+
+    if block_last_line.strip().startswith(("else", "if")):
+        if "then" in block_last_line and not block_last_line.strip().endswith("then"):
+            return False
         return True
-    if "sub init()" in code_block and not line.strip().startswith(("sub", "function")):
+
+    if "else" in block_last_line:
         return True
     return False
 
 
 def to_code_blocks(brs_text):
     lines = brs_text.split("\n")
-
     blocks = []
     i = 0
-
     for line in lines:
         if not blocks:
             blocks.append(line)
             continue
-        if should_add_into_current_block(line, blocks[-1]):
+        if should_add_into_current_block(blocks[-1]):
             blocks[-1] += "\n" + line
         else:
             blocks.append(line)
-
     return blocks
 
-    # while i < len(lines):
-    #     if lines[i].lower().startswith("sub") or lines[i].lower().startswith("function"):
-    #         function = [lines[i]]
-    #         j = i + 1
-    #         while not (lines[j].lower().startswith("end sub") or lines[j].lower().startswith("end function")):
-    #             function.append(lines[j])
-    #             j += 1
-    #
-    #         function.append(lines[j])
-    #         functions.append("\n".join(function))
-    #         i = j
-    #
-    #     i += 1
-    # return functions
 
-
-def transform_block(block, starting_line_num):
-    return block, starting_line_num
+def transform_block(component_name, block, line_num):
+    coverage_line = "{}_markTestCoverage({}, {})"
+    if not block.strip() or block.strip().startswith(("'", "end", "sub", "function")):
+        return block
+    if block.strip().startswith(("else", "if")):
+        if "then" in block and not block.strip().endswith("then"):
+            return "DO THEN HERE"
+        return "DO IF ELSE HERE"
+    return coverage_line.format(component_name, line_num, block.count("\n") + 1) + "\n" + block
+    # return "Mark line num: " + str(line_num) + "\n" + block
 
 
 def transform_component(component_file):
+    mark_test_func = """sub {0}_markTestCoverage(startingIndex, lineCount)
+  fields = {{}}
+  for i = 0 to line_num -1
+    index = (startingIndex + lineCount).toStr()
+    m.global.testCoverage.{0}.[index] += 1
+  end for
+end sub
+
+"""
+
     component_raw = open(component_file, 'r').read()
     component_name = component_file.split(os.sep)[-1].split(".")[0]
     print("\nCOMPONENT: " + component_name)
 
-    for block in to_code_blocks(component_raw):
-        print(">>>\n" + block + "\n<<<")
-
-
-    blocks = []
     line_num = 1
-    for block in blocks:
-        transformed_block, line_num = transform_block(block, line_num)
-        component_raw.replace(block, transformed_block)
+    transformed_blocks = []
+    for line in to_code_blocks(component_raw):
+        print(">>>\n", line, "\n<<<")
+    for block in to_code_blocks(component_raw):
+        transformed_block = transform_block(component_name, block, line_num)
+        transformed_blocks.append(transformed_block)
+        line_num += block.count("\n") + 1
+
+    print("\n".join(transformed_blocks))
+    # blocks = []
+    # for block in blocks:
+    #     transformed_block, line_num = transform_block(block, line_num)
+    #     component_raw.replace(block, transformed_block)
 
 
     # global components
