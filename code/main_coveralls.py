@@ -55,6 +55,31 @@ def to_code_blocks(brs_text):
     return blocks
 
 
+def get_block_type(block):
+    if "if" not in block and "else" not in block:
+        return 0  # Normal block of code
+
+    first_line = block.split("\n", 1)[0]
+    if first_line.count("if") == 1 and first_line.count("then") == 1 and not first_line.strip().endswith("then"):
+        return 1  # Inline if
+
+    return 2  # Normal if/else
+
+
+def process(block, line_num):  # draft function
+    line_count = lambda line: line.count("\n") - 1
+    block_type = get_block_type(block)
+    if block_type == 0:
+        return "Processed: {} - {}\n{}".format(line_num, line_num + line_count(block) + 1, block)
+    if block_type == 1:
+        return "Processed then (WIP): {} - {}: {}".format(line_num, line_num + line_count(block) + 1, block)
+
+    line_split = block.split("\n", 1)
+    line_split[0] += "\nProcessed: {} - {}".format(line_num, line_num)
+    line_split[1] = process(line_split[1], line_num + 1)
+    return "\n".join(line_split)
+
+
 def transform_block(component_name, block, line_num):
     coverage_line = "{}_markTestCoverage({}, {})"
     if not block.strip() or block.strip().startswith(("'", "end", "sub", "function")):
@@ -96,7 +121,6 @@ end sub
     # for block in blocks:
     #     transformed_block, line_num = transform_block(block, line_num)
     #     component_raw.replace(block, transformed_block)
-
 
     # global components
     # components.append([component_name, [1,4,5,7], 67])

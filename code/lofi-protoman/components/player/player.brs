@@ -73,6 +73,21 @@ sub componentDidUpdate(prevProps as object, prevState as object)
     loadAsset(m.props.manifest)
   end if
 
+  if m.constants.updateBufferPercentage then
+    ' devices with slow CPUs can't handle rapid changes to buffering percentage
+    m.components.video.observeField("bufferingStatus", "onBufferingStatusChanged")
+    if m.constants.updateBufferPercentage then
+      m.components.video.observeField("bufferingStatus", "onBufferingStatusChanged")
+    else
+      m.components.video.observeField("bufferingStatus", "onBufferingStatusChanged")
+    end if
+  else
+    if m.constants.updateBufferPercentage then m.tasks.thumbnails.callFunc("load", {
+      uri: m.props.manifestThumbs
+      playhead: m.props.playhead
+    })
+  end if
+
   if m.props.playState <> invalid and shouldUpdateVideoControl() then
     control = lCase(m.props.playState)
     videoPlayState = m.components.video.state
