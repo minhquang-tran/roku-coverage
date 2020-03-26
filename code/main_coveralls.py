@@ -2,6 +2,16 @@ import os
 import sys
 from distutils.dir_util import copy_tree
 
+coverage_line_template = "{}_markTestCoverage({}, {})"
+mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
+  for i = 0 to line_num - 1
+    index = (startingIndex + lineCount).toStr()
+    m.global.testCoverage.{0}.[index] += 1
+  end for
+end sub
+
+"""
+
 
 def is_balanced(block):
     if block.count("(") != block.count(")"):
@@ -72,54 +82,68 @@ def get_line_count(block):
     return block.count("\n") + 1
 
 
+def transform_inline_if(component_name, block, line_num):
+    extra_sub_template = """sub {}_markLine{}()
+      {}_markTestCoverage({}, {})
+      {}
+    end sub"""
+
+    extra_function_template = """function {}_markLine{}() as object
+  {}_markTestCoverage({}, {})
+  return {}
+end function"""
+
+    if " then return " in block:
+        then_split = block.split("then return ")
+        extra_function = extra_function_template.format(component_name, line_num,
+                                                        component_name, line_num, get_line_count(then_split[1]),
+                                                        then_split[1])
+        then_split[1] = "{}_markLine{}()".format(component_name, line_num)
+        return "then return ".join(then_split), extra_function
+
+    then_split = block.split("then ")
+    extra_function = extra_sub_template.format(component_name, line_num,
+                                               component_name, line_num, get_line_count(then_split[1]),
+                                               then_split[1])
+    then_split[1] = "{}_markLine{}()".format(component_name, line_num)
+    return "then ".join(then_split), extra_function
+
+
 def transform_block(component_name, block, line_num):
-    coverage_line = "{}_markTestCoverage({}, {})"
     if not block.strip() or block.strip().startswith(("'", "end ", "sub ", "function ")):
-        return block
+        return block, []
     block_type = get_block_type(block)
     if block_type == 0:
-        return coverage_line.format(component_name, line_num, get_line_count(block)) + "\n" + block
+        return coverage_line_template.format(component_name, line_num, get_line_count(block)) + "\n" + block, []
     if block_type == 1:
-        return "Processed then (WIP): {} - {}: {}".format(line_num, line_num + get_line_count(block) - 1, block)
+        return transform_inline_if(component_name, block, line_num)
 
     line_split = block.split("\n", 1)
-    line_split[0] += "\n" + coverage_line.format(component_name, line_num, 1)
-    line_split[1] = transform_block(component_name, line_split[1], line_num + 1)
-    return "\n".join(line_split)
+    line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
+    line_split[1] = transform_block(component_name, line_split[1], line_num + 1)[0]
+    return "\n".join(line_split), []
 
 
 def transform_component(component_file):
-    mark_test_func = """sub {0}_markTestCoverage(startingIndex, lineCount)
-  fields = {{}}
-  for i = 0 to line_num -1
-    index = (startingIndex + lineCount).toStr()
-    m.global.testCoverage.{0}.[index] += 1
-  end for
-end sub
-
-"""
-
     component_raw = open(component_file, 'r').read()
-    component_name = component_file.split(os.sep)[-1].split(".")[0]
+    component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
     print("\nCOMPONENT: " + component_name)
 
     line_num = 1
     transformed_blocks = []
-    for line in to_code_blocks(component_raw):
-        print(">>>\n", line, "\n<<<")
+    extra_blocks = []
+    # for line in to_code_blocks(component_raw):
+    #     print(">>>\n", line, "\n<<<")
     for block in to_code_blocks(component_raw):
-        transformed_block = transform_block(component_name, block, line_num)
+        transformed_block, extra_block = transform_block(component_name, block, line_num)
         transformed_blocks.append(transformed_block)
+        if extra_block:
+            extra_blocks.append(extra_block)
         line_num += block.count("\n") + 1
 
-    print("\n".join(transformed_blocks))
-    # blocks = []
-    # for block in blocks:
-    #     transformed_block, line_num = transform_block(block, line_num)
-    #     component_raw.replace(block, transformed_block)
+    mark_test_function = mark_test_function_template.format(component_name)
 
-    # global components
-    # components.append([component_name, [1,4,5,7], 67])
+    print("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
 
 
 def transform_main(main_file):
