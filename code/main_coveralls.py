@@ -26,16 +26,16 @@ def should_add_into_current_block(code_block):
     if "sub init()" in code_block:
         if block_last_line.strip() == "sub init()":
             return True
-        if block_last_line.strip().startswith(("sub", "function")):
+        if block_last_line.strip().startswith(("sub ", "function ")):
             return False
         return True
 
-    if block_last_line.strip().startswith(("else", "if")):
-        if "then" in block_last_line and not block_last_line.strip().endswith("then"):
+    if block_last_line.strip().split(" ")[0] in ("else", "if"):
+        if "then" in block_last_line.split(" ") and not block_last_line.strip().endswith(" then"):
             return False
         return True
 
-    if "else" in block_last_line:
+    if "else" in block_last_line.split(" "):
         return True
     return False
 
@@ -56,40 +56,36 @@ def to_code_blocks(brs_text):
 
 
 def get_block_type(block):
-    if "if" not in block and "else" not in block:
+    words = block.replace("\n", " ").split(" ")
+    if "if" not in words and "else" not in words:
         return 0  # Normal block of code
 
     first_line = block.split("\n", 1)[0]
-    if first_line.count("if") == 1 and first_line.count("then") == 1 and not first_line.strip().endswith("then"):
+    if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1 \
+            and not first_line.strip().endswith(" then"):
         return 1  # Inline if
 
     return 2  # Normal if/else
 
 
-def process(block, line_num):  # draft function
-    line_count = lambda line: line.count("\n") - 1
-    block_type = get_block_type(block)
-    if block_type == 0:
-        return "Processed: {} - {}\n{}".format(line_num, line_num + line_count(block) + 1, block)
-    if block_type == 1:
-        return "Processed then (WIP): {} - {}: {}".format(line_num, line_num + line_count(block) + 1, block)
-
-    line_split = block.split("\n", 1)
-    line_split[0] += "\nProcessed: {} - {}".format(line_num, line_num)
-    line_split[1] = process(line_split[1], line_num + 1)
-    return "\n".join(line_split)
+def get_line_count(block):
+    return block.count("\n") + 1
 
 
 def transform_block(component_name, block, line_num):
     coverage_line = "{}_markTestCoverage({}, {})"
-    if not block.strip() or block.strip().startswith(("'", "end", "sub", "function")):
+    if not block.strip() or block.strip().startswith(("'", "end ", "sub ", "function ")):
         return block
-    if block.strip().startswith(("else", "if")):
-        if "then" in block and not block.strip().endswith("then"):
-            return "DO THEN HERE"
-        return "DO IF ELSE HERE"
-    return coverage_line.format(component_name, line_num, block.count("\n") + 1) + "\n" + block
-    # return "Mark line num: " + str(line_num) + "\n" + block
+    block_type = get_block_type(block)
+    if block_type == 0:
+        return coverage_line.format(component_name, line_num, get_line_count(block)) + "\n" + block
+    if block_type == 1:
+        return "Processed then (WIP): {} - {}: {}".format(line_num, line_num + get_line_count(block) - 1, block)
+
+    line_split = block.split("\n", 1)
+    line_split[0] += "\n" + coverage_line.format(component_name, line_num, 1)
+    line_split[1] = transform_block(component_name, line_split[1], line_num + 1)
+    return "\n".join(line_split)
 
 
 def transform_component(component_file):
@@ -164,7 +160,7 @@ for root, dirs, files in os.walk(coverage_dir):
 component_files.sort()
 
 components = []
-for component_file in component_files:
-    transform_component(component_file)
+for file in component_files:
+    transform_component(file)
 
 print(components)
