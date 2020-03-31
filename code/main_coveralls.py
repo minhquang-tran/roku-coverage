@@ -116,7 +116,7 @@ end function"""
     return "then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
 
 
-def transform_block(component_name, block, line_num, block_covered_lines=[]):
+def transform_block(component_name, block, line_num):
     if not block.strip() or block.strip().startswith(("'", "end ", "sub ", "function ")):
         return block, [], []
     block_type = get_block_type(block)
@@ -129,11 +129,12 @@ def transform_block(component_name, block, line_num, block_covered_lines=[]):
     if block_type == 1:
         return transform_inline_if(component_name, block, line_num)
 
+    block_covered_lines = []
     line_split = block.split("\n", 1)
     line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
-    # block_covered_lines.append(line_num)
-    line_split[1], extra_block, covered_lines = transform_block(component_name, line_split[1], line_num + 1, block_covered_lines)
-    # block_covered_lines += covered_lines
+    block_covered_lines.append(line_num)
+    line_split[1], extra_block, covered_lines = transform_block(component_name, line_split[1], line_num + 1)
+    block_covered_lines += covered_lines
     return "\n".join(line_split), extra_block, block_covered_lines
 
 
@@ -146,8 +147,8 @@ def transform_component(component_file):
     transformed_blocks = []
     extra_blocks = []
     component_covered_lines = []
-    for line in to_code_blocks(component_raw):
-        print(">>>\n", line, "\n<<<")
+    # for line in to_code_blocks(component_raw):
+    #     print(">>>\n", line, "\n<<<")
     for block in to_code_blocks(component_raw):
         transformed_block, extra_block, covered_lines = transform_block(component_name, block, line_num)
         transformed_blocks.append(transformed_block)
@@ -162,6 +163,7 @@ def transform_component(component_file):
 
     print("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
     print(component_covered_lines)
+    print("File length:", line_num - 1)
 
 
 def transform_main(main_file):
