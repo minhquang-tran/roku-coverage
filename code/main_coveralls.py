@@ -9,7 +9,6 @@ mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCou
     m.global.testCoverage.{0}.[index] += 1
   end for
 end sub
-
 """
 
 
@@ -83,12 +82,14 @@ def get_line_count(block):
 
 
 def transform_inline_if(component_name, block, line_num):
-    extra_sub_template = """sub {}_markLine{}()
-      {}_markTestCoverage({}, {})
-      {}
-    end sub"""
+    extra_sub_template = """
+sub {}_markLine{}()
+  {}_markTestCoverage({}, {})
+  {}
+end sub"""
 
-    extra_function_template = """function {}_markLine{}() as object
+    extra_function_template = """
+function {}_markLine{}() as object
   {}_markTestCoverage({}, {})
   return {}
 end function"""
@@ -132,6 +133,7 @@ def transform_component(component_file):
     line_num = 1
     transformed_blocks = []
     extra_blocks = []
+    covered_lines = []
     # for line in to_code_blocks(component_raw):
     #     print(">>>\n", line, "\n<<<")
     for block in to_code_blocks(component_raw):
