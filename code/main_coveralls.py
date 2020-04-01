@@ -2,15 +2,6 @@ import os
 import sys
 from distutils.dir_util import copy_tree
 
-coverage_line_template = "{}_markTestCoverage({}, {})"
-mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
-  for i = 0 to line_num - 1
-    index = (startingIndex + lineCount).toStr()
-    m.global.testCoverage.{0}.[index] += 1
-  end for
-end sub
-"""
-
 
 def is_balanced(block):
     if block.count("(") != block.count(")"):
@@ -52,7 +43,6 @@ def should_add_into_current_block(code_block):
 def to_code_blocks(brs_text):
     lines = brs_text.split("\n")
     blocks = []
-    i = 0
     for line in lines:
         if not blocks:
             blocks.append(line)
@@ -81,21 +71,21 @@ def get_line_count(block):
     return block.count("\n") + 1
 
 
-def transform_inline_if(component_name, block, line_num):
-    extra_sub_template = """
+extra_sub_template = """
 sub {}_markLine{}()
   {}_markTestCoverage({}, {})
   {}
 end sub"""
 
-    extra_function_template = """
+extra_function_template = """
 function {}_markLine{}() as object
   {}_markTestCoverage({}, {})
   return {}
 end function"""
 
-    if " then return " in block:
 
+def transform_inline_if(component_name, block, line_num):
+    if " then return " in block:
         then_split = block.split("then return ")
         line_count = get_line_count(then_split[1])
         extra_function = extra_function_template.format(component_name, line_num,
@@ -116,6 +106,9 @@ end function"""
     return "then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
 
 
+coverage_line_template = "{}_markTestCoverage({}, {})"
+
+
 def transform_block(component_name, block, line_num):
     if not block.strip() or block.strip().startswith(("'", "end ", "sub ", "function ")):
         return block, [], []
@@ -129,13 +122,21 @@ def transform_block(component_name, block, line_num):
     if block_type == 1:
         return transform_inline_if(component_name, block, line_num)
 
-    block_covered_lines = []
     line_split = block.split("\n", 1)
     line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
-    block_covered_lines.append(line_num)
+    block_covered_lines = [line_num]
     line_split[1], extra_block, covered_lines = transform_block(component_name, line_split[1], line_num + 1)
     block_covered_lines += covered_lines
     return "\n".join(line_split), extra_block, block_covered_lines
+
+
+mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
+  for i = 0 to line_num - 1
+    index = (startingIndex + lineCount).toStr()
+    m.global.testCoverage.{0}.[index] += 1
+  end for
+end sub
+"""
 
 
 def transform_component(component_file):
@@ -162,16 +163,30 @@ def transform_component(component_file):
     mark_test_function = mark_test_function_template.format(component_name)
 
     print("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
+    with open(component_file, 'w') as file_object:
+        file_object.write("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
+
     print(component_covered_lines)
     print("File length:", line_num - 1)
 
+    return component_name, line_num - 1, component_covered_lines
 
-def transform_main(main_file):
-    main_component_lines = """m.global.testCoverage.addFields({playerscrubber: createobject("roSGNode","ContentNode")})
-  m.global.testCoverage.playerscrubber.addFields({"length":774})
-  for each line in [1,5,7,10,15]
-    m.global.testCoverage.playerscrubber.addFields({line: 0})
-  end for"""
+
+main_component_lines = """
+  m.global.testCoverage.addFields({{{0}: createObject("roSGNode","ContentNode")}})
+  m.global.testCoverage.{0}.addFields({{"length":{1}}})
+  lines = {{}}
+  for each line in {2}
+    lines[line.toStr()] = 0    
+  end for
+  m.global.testCoverage.{0}.addFields(lines)"""
+
+
+def transform_main(main_file, components):
+    component_lines = []
+    for component, line_count, covered_lines in components:
+        component_lines.append(main_component_lines.format(component, line_count, covered_lines))
+    print("\n".join(component_lines))
 
 
 # read input & create directory
@@ -204,7 +219,8 @@ for root, dirs, files in os.walk(coverage_dir):
 component_files.sort()
 
 components = []
-for file in component_files:
-    transform_component(file)
+for component_file in component_files:
+    components.append(transform_component(component_file))
 
 print(components)
+transform_main(main_file, components)
