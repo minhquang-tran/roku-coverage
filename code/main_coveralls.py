@@ -1,6 +1,7 @@
 import os
 import sys
 from distutils.dir_util import copy_tree
+from hashlib import md5
 
 
 def is_balanced(block):
@@ -142,6 +143,8 @@ end sub
 def transform_component(component_file):
     component_raw = open(component_file, 'r').read()
     component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
+
+    hashed = md5(component_raw.encode('utf-8')).hexdigest()
     print("\nCOMPONENT: " + component_name)
 
     line_num = 1
@@ -169,12 +172,22 @@ def transform_component(component_file):
     print(component_covered_lines)
     print("File length:", line_num - 1)
 
-    return component_name, line_num - 1, component_covered_lines
+    return component_name, line_num - 1, component_covered_lines, hashed
 
+
+main_init_mark = "' <Test Coverage: add new global fields here> '"
+main_report_mark = "' <Test Coverage: print report here> '"
+
+main_coverage_lines = """
+  m.global.addFields({testCoverage: createObject("roSGNode", "ContentNode")})
+  testCoverageComponents = []"""
 
 main_component_lines = """
+  testCoverageComponents.push("{0}")
   m.global.testCoverage.addFields({{{0}: createObject("roSGNode","ContentNode")}})
   m.global.testCoverage.{0}.addFields({{"length":{1}}})
+  m.global.testCoverage.{0}.addFields({{"hash":"{3}"}})
+
   lines = {{}}
   for each line in {2}
     lines[line.toStr()] = 0    
@@ -184,9 +197,15 @@ main_component_lines = """
 
 def transform_main(main_file, components):
     component_lines = []
-    for component, line_count, covered_lines in components:
-        component_lines.append(main_component_lines.format(component, line_count, covered_lines))
-    print("\n".join(component_lines))
+    for component, line_count, covered_lines, hashed in components:
+        if covered_lines:
+            component_lines.append(main_component_lines.format(component, line_count, covered_lines, hashed))
+    if not component_lines:
+        return
+    main_raw = open(main_file, 'r').read()
+    main_raw = main_raw.replace(main_init_mark, "\n".join([main_coverage_lines] + component_lines))
+    # main_raw = main_raw.replace(main_report_mark)
+    print(main_raw)
 
 
 # read input & create directory
@@ -220,6 +239,7 @@ component_files.sort()
 
 components = []
 for component_file in component_files:
+    print("FILE:", component_file)
     components.append(transform_component(component_file))
 
 print(components)
