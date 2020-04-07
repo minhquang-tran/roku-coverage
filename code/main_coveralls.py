@@ -141,38 +141,32 @@ end sub
 
 
 def transform_component(component_file):
+    global coverage_dir
+    local_file_path = component_file.replace(coverage_dir, "")
     component_raw = open(component_file, 'r').read()
     component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
 
     hashed = md5(component_raw.encode('utf-8')).hexdigest()
-    print("\nCOMPONENT: " + component_name)
+    print("\nCOMPONENT: " + local_file_path)
 
     line_num = 1
     transformed_blocks = []
     extra_blocks = []
     component_covered_lines = []
-    # for line in to_code_blocks(component_raw):
-    #     print(">>>\n", line, "\n<<<")
     for block in to_code_blocks(component_raw):
         transformed_block, extra_block, covered_lines = transform_block(component_name, block, line_num)
         transformed_blocks.append(transformed_block)
         if extra_block:
             extra_blocks.append(extra_block)
-        # print("covering", len(component_covered_lines), len(covered_lines))
-        # print(component_covered_lines)
         component_covered_lines += covered_lines
         line_num += block.count("\n") + 1
 
     mark_test_function = mark_test_function_template.format(component_name)
 
-    print("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
     with open(component_file, 'w') as file_object:
         file_object.write("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
 
-    print(component_covered_lines)
-    print("File length:", line_num - 1)
-
-    return component_name, line_num - 1, component_covered_lines, hashed
+    return component_name, local_file_path, line_num - 1, component_covered_lines, hashed
 
 
 main_init_mark = "' <Test Coverage: add new global fields here> '"
@@ -185,27 +179,57 @@ main_coverage_lines = """
 main_component_lines = """
   testCoverageComponents.push("{0}")
   m.global.testCoverage.addFields({{{0}: createObject("roSGNode","ContentNode")}})
-  m.global.testCoverage.{0}.addFields({{"length":{1}}})
-  m.global.testCoverage.{0}.addFields({{"hash":"{3}"}})
-
+  m.global.testCoverage.{0}.addFields({{
+    "path": "{1}"
+    "length": {2}
+    "hash": "{4}"
+  }})
   lines = {{}}
-  for each line in {2}
+  for each line in {3}
     lines[line.toStr()] = 0    
   end for
   m.global.testCoverage.{0}.addFields(lines)"""
 
+report_coverage_lines = """
+    sourceFilesAA = []
+    for each componentName in testCoverageComponent
+      componentCoverage = m.global.testCoverage[componentName]
+      coverage = []
+      for i = 1 to componentCoverage.length
+        coverage.push(componentCoverage[i.toStr()])
+      end for
+      sourceFilesAA.push({{
+        "name": componentCoverage.path
+        "source_digest": componentCoverage.hash
+        "coverage": coverage
+      }})
+    end for
+    coverageJsonRaw = {{
+      json: {{
+        "service_job_id": {}
+        "service_name": "circle-ci"
+        "source_files": sourceFilesAA
+      }}
+    }}
+
+    coverallsRequest = CreateObject("roUrlTransfer")
+    coverallsRequest.setUrl("https://coveralls.io/api/v1/jobs")
+    coverallsRequest.AsyncPostFromString("json=" + formatJson(coverageJsonRaw))"""
+
 
 def transform_main(main_file, components):
     component_lines = []
-    for component, line_count, covered_lines, hashed in components:
+    for component, file_path, line_count, covered_lines, hashed in components:
         if covered_lines:
-            component_lines.append(main_component_lines.format(component, line_count, covered_lines, hashed))
+            component_lines.append(main_component_lines.format(component, file_path, line_count, covered_lines, hashed))
     if not component_lines:
         return
     main_raw = open(main_file, 'r').read()
     main_raw = main_raw.replace(main_init_mark, "\n".join([main_coverage_lines] + component_lines))
-    # main_raw = main_raw.replace(main_report_mark)
+    main_raw = main_raw.replace(main_report_mark, report_coverage_lines.format(sys.argv[2]))
     print(main_raw)
+    with open(main_file, 'w') as file_object:
+        file_object.write(main_raw)
 
 
 # read input & create directory
@@ -237,10 +261,12 @@ for root, dirs, files in os.walk(coverage_dir):
             component_files.append(os.path.join(root, name))
 component_files.sort()
 
+# transforming component files
 components = []
 for component_file in component_files:
-    print("FILE:", component_file)
     components.append(transform_component(component_file))
 
-print(components)
+# transforming main.brs file
 transform_main(main_file, components)
+
+print("DONE")
