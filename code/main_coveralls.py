@@ -1,7 +1,9 @@
 import os
+import re
 import sys
 from distutils.dir_util import copy_tree
 from hashlib import md5
+from subprocess import Popen, PIPE
 
 
 def is_balanced(block):
@@ -22,6 +24,8 @@ def should_add_into_current_block(code_block):
     #   Before last line of function until after next function: handled by transforming function
     if not is_balanced(code_block):
         return True
+
+    code_block = code_block.lower()
 
     block_last_line = code_block.split("\n")[-1]
     if "sub init()" in code_block:
@@ -56,8 +60,11 @@ def to_code_blocks(brs_text):
 
 
 def get_block_type(block):
-    words = block.replace("\n", " ").split(" ")
-    if "if" not in words and "else" not in words:
+    block = block.lower()
+    words = block.replace("\n", " ").strip().split(" ")
+    # if "if" not in words and "else" not in words:
+    # print("BLOCK: ", block, "FIRST WORD:", words[0])
+    if words[0] not in ["if", "else"]:
         return 0  # Normal block of code
 
     first_line = block.split("\n", 1)[0]
@@ -86,8 +93,9 @@ end function"""
 
 
 def transform_inline_if(component_name, block, line_num):
-    if " then return " in block:
-        then_split = block.split("then return ")
+    if " then return " in block.lower():
+        # then_split = block.split("then return ")
+        then_split = re.split("then return ", block, flags=re.IGNORECASE)
         line_count = get_line_count(then_split[1])
         extra_function = extra_function_template.format(component_name, line_num,
                                                         component_name, line_num, line_count,
@@ -98,7 +106,7 @@ def transform_inline_if(component_name, block, line_num):
             extra_function, \
             [line_num + extra_line for extra_line in range(line_count)]
 
-    then_split = block.split("then ")
+    then_split = re.split("then ", block, flags=re.IGNORECASE)
     line_count = get_line_count(then_split[1])
     extra_function = extra_sub_template.format(component_name, line_num,
                                                component_name, line_num, line_count,
@@ -111,7 +119,8 @@ coverage_line_template = "{}_markTestCoverage({}, {})"
 
 
 def transform_block(component_name, block, line_num):
-    if not block.strip() or block.strip().startswith(("'", "end ", "sub ", "function ")):
+    # print(">>>\n", block, "\n<<<")
+    if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
         return block, [], []
     block_type = get_block_type(block)
     if block_type == 0:
@@ -145,9 +154,10 @@ def transform_component(component_file):
     local_file_path = component_file.replace(coverage_dir, "")
     component_raw = open(component_file, 'r').read()
     component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
+    component_name = "_".join(filter(len, local_file_path.split(".")[0].split(os.sep))).replace("-", "_")
 
     hashed = md5(component_raw.encode('utf-8')).hexdigest()
-    print("\nCOMPONENT: " + local_file_path)
+    print("------------------------\nTransforming component: " + local_file_path)
 
     line_num = 1
     transformed_blocks = []
@@ -205,11 +215,9 @@ report_coverage_lines = """
       }})
     end for
     coverageJsonRaw = {{
-      json: {{
-        "service_job_id": {}
-        "service_name": "circle-ci"
-        "source_files": sourceFilesAA
-      }}
+      "service_job_id": "{}"
+      "service_name": "circle-ci"
+      "source_files": sourceFilesAA
     }}
 
     coverallsRequest = CreateObject("roUrlTransfer")
@@ -227,7 +235,6 @@ def transform_main(main_file, components):
     main_raw = open(main_file, 'r').read()
     main_raw = main_raw.replace(main_init_mark, "\n".join([main_coverage_lines] + component_lines))
     main_raw = main_raw.replace(main_report_mark, report_coverage_lines.format(sys.argv[2]))
-    print(main_raw)
     with open(main_file, 'w') as file_object:
         file_object.write(main_raw)
 
@@ -270,3 +277,9 @@ for component_file in component_files:
 transform_main(main_file, components)
 
 print("DONE")
+
+# os.environ["ROKU_DEV_TARGET"] = "192.168.2.2"
+# os.environ["DEVPASSWORD"] = "aaaa"
+# sp = Popen(["make", "install"], cwd=coverage_dir, stdin=PIPE)
+# sp.stdin.write(b'\n')
+# sp.wait()
