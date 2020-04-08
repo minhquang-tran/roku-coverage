@@ -36,8 +36,11 @@ def should_add_into_current_block(code_block):
         return True
 
     if block_last_line.strip().split(" ")[0] in ("else", "if"):
-        if "then" in block_last_line.split(" ") and not block_last_line.strip().endswith(" then"):
-            return False
+        # if get_block_type(block_last_line.strip()) == 1:
+        if "then" in block_last_line.split(" "): # and not block_last_line.strip().endswith(" then"):
+            then_split = block_last_line.split(" then")
+            if then_split[1] and not then_split[1].strip().startswith("'"):
+                return False
         return True
 
     if "else" in block_last_line.split(" "):
@@ -68,9 +71,10 @@ def get_block_type(block):
         return 0  # Normal block of code
 
     first_line = block.split("\n", 1)[0]
-    if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1 \
-            and not first_line.strip().endswith(" then"):
-        return 1  # Inline if
+    if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1:
+        then_split = first_line.strip().split(" then")
+        if then_split[1] and not then_split[1].strip().startswith("'"):
+            return 1  # Inline if
 
     return 2  # Normal if/else
 
@@ -93,6 +97,7 @@ end function"""
 
 
 def transform_inline_if(component_name, block, line_num):
+    # print("block:", block)
     if " then return " in block.lower():
         # then_split = block.split("then return ")
         then_split = re.split("then return ", block, flags=re.IGNORECASE)
@@ -106,13 +111,14 @@ def transform_inline_if(component_name, block, line_num):
             extra_function, \
             [line_num + extra_line for extra_line in range(line_count)]
 
-    then_split = re.split("then ", block, flags=re.IGNORECASE)
+    then_split = re.split(" then ", block, flags=re.IGNORECASE)
+    # print("split", then_split)
     line_count = get_line_count(then_split[1])
     extra_function = extra_sub_template.format(component_name, line_num,
                                                component_name, line_num, line_count,
                                                then_split[1])
     then_split[1] = "{}_markLine{}()".format(component_name, line_num)
-    return "then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
+    return " then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
 
 
 coverage_line_template = "{}_markTestCoverage({}, {})"
@@ -133,6 +139,7 @@ def transform_block(component_name, block, line_num):
         return transform_inline_if(component_name, block, line_num)
 
     line_split = block.split("\n", 1)
+    # print("line_split", line_split)
     line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
     block_covered_lines = [line_num]
     line_split[1], extra_block, covered_lines = transform_block(component_name, line_split[1], line_num + 1)
