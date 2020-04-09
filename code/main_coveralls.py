@@ -83,42 +83,41 @@ def get_line_count(block):
     return block.count("\n") + 1
 
 
-extra_sub_template = """
-sub {}_markLine{}()
-  {}_markTestCoverage({}, {})
-  {}
-end sub"""
-
-extra_function_template = """
-function {}_markLine{}() as object
-  {}_markTestCoverage({}, {})
-  return {}
-end function"""
-
-
 def transform_inline_if(component_name, block, line_num):
-    # print("block:", block)
-    if " then return " in block.lower():
-        # then_split = block.split("then return ")
-        then_split = re.split("then return ", block, flags=re.IGNORECASE)
-        line_count = get_line_count(then_split[1])
-        extra_function = extra_function_template.format(component_name, line_num,
-                                                        component_name, line_num, line_count,
-                                                        then_split[1])
-        then_split[1] = "{}_markLine{}()".format(component_name, line_num)
-        return \
-            "then return ".join(then_split), \
-            extra_function, \
-            [line_num + extra_line for extra_line in range(line_count)]
-
+    line_count = get_line_count(block)
+    words = block.lower().replace("\n", " ").split(" ")
+    coverage_line = coverage_line_template.format(component_name, line_num, line_count)
+    if "if" in words and "then" in words and "else" in words:
+        return coverage_line + "\n" + block
     then_split = re.split(" then ", block, flags=re.IGNORECASE)
-    # print("split", then_split)
-    line_count = get_line_count(then_split[1])
-    extra_function = extra_sub_template.format(component_name, line_num,
-                                               component_name, line_num, line_count,
-                                               then_split[1])
-    then_split[1] = "{}_markLine{}()".format(component_name, line_num)
-    return " then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
+    return "\n".join([then_split[0],
+                      coverage_line,
+                      then_split[1],
+                      (len(block) - len(block.lstrip(' '))) * " " + "end if"]), \
+           [line_num + extra_line for extra_line in range(line_count)]
+
+    # # print("block:", block)
+    # if " then return " in block.lower():
+    #     # then_split = block.split("then return ")
+    #     then_split = re.split("then return ", block, flags=re.IGNORECASE)
+    #     line_count = get_line_count(then_split[1])
+    #     extra_function = extra_function_template.format(component_name, line_num,
+    #                                                     component_name, line_num, line_count,
+    #                                                     then_split[1])
+    #     then_split[1] = "{}_markLine{}()".format(component_name, line_num)
+    #     return \
+    #         "then return ".join(then_split), \
+    #         extra_function, \
+    #         [line_num + extra_line for extra_line in range(line_count)]
+    #
+    # then_split = re.split(" then ", block, flags=re.IGNORECASE)
+    # # print("split", then_split)
+    # line_count = get_line_count(then_split[1])
+    # extra_function = extra_sub_template.format(component_name, line_num,
+    #                                            component_name, line_num, line_count,
+    #                                            then_split[1])
+    # then_split[1] = "{}_markLine{}()".format(component_name, line_num)
+    # return " then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
 
 
 coverage_line_template = "{}_markTestCoverage({}, {})"
@@ -127,13 +126,12 @@ coverage_line_template = "{}_markTestCoverage({}, {})"
 def transform_block(component_name, block, line_num):
     # print(">>>\n", block, "\n<<<")
     if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
-        return block, [], []
+        return block, []
     block_type = get_block_type(block)
     if block_type == 0:
         line_count = get_line_count(block)
         return \
             coverage_line_template.format(component_name, line_num, line_count) + "\n" + block, \
-            [], \
             [line_num + extra_line for extra_line in range(line_count)]
     if block_type == 1:
         return transform_inline_if(component_name, block, line_num)
@@ -142,9 +140,9 @@ def transform_block(component_name, block, line_num):
     # print("line_split", line_split)
     line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
     block_covered_lines = [line_num]
-    line_split[1], extra_block, covered_lines = transform_block(component_name, line_split[1], line_num + 1)
+    line_split[1], covered_lines = transform_block(component_name, line_split[1], line_num + 1)
     block_covered_lines += covered_lines
-    return "\n".join(line_split), extra_block, block_covered_lines
+    return "\n".join(line_split), block_covered_lines
 
 
 mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
@@ -168,20 +166,17 @@ def transform_component(component_file):
 
     line_num = 1
     transformed_blocks = []
-    extra_blocks = []
     component_covered_lines = []
     for block in to_code_blocks(component_raw):
-        transformed_block, extra_block, covered_lines = transform_block(component_name, block, line_num)
+        transformed_block, covered_lines = transform_block(component_name, block, line_num)
         transformed_blocks.append(transformed_block)
-        if extra_block:
-            extra_blocks.append(extra_block)
         component_covered_lines += covered_lines
         line_num += block.count("\n") + 1
 
     mark_test_function = mark_test_function_template.format(component_name)
 
     with open(component_file, 'w') as file_object:
-        file_object.write("\n".join([mark_test_function] + transformed_blocks + extra_blocks))
+        file_object.write("\n".join([mark_test_function] + transformed_blocks))
 
     return component_name, local_file_path, line_num - 1, component_covered_lines, hashed
 
