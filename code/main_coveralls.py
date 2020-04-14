@@ -5,6 +5,14 @@ from distutils.dir_util import copy_tree
 from hashlib import md5
 from subprocess import Popen, PIPE
 
+comment_regex_pattern = "'(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
+if_regex_pattern = "(?:^| )if (?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
+if_regex = re.compile(if_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
+then_regex_pattern = "(?:^| )then(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
+then_regex = re.compile(then_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
+else_regex_pattern = "(?:^| )else(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
+else_regex = re.compile(else_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
+
 
 def is_balanced(block):
     if block.count("(") != block.count(")"):
@@ -35,15 +43,22 @@ def should_add_into_current_block(code_block):
             return False
         return True
 
-    if block_last_line.strip().split(" ")[0] in ("else", "if"):
-        # if get_block_type(block_last_line.strip()) == 1:
-        if "then" in block_last_line.split(" "): # and not block_last_line.strip().endswith(" then"):
-            then_split = block_last_line.split(" then")
-            if then_split[1] and not then_split[1].strip().startswith("'"):
-                return False
+    uncommented = re.split(comment_regex_pattern, block_last_line, 1)[0]
+    if if_regex.findall(uncommented) or else_regex.findall(uncommented):
+        then_split = then_regex.split(uncommented)
+        if len(then_split) > 1 and then_split[-1]:
+            return False
         return True
 
-    if "else" in block_last_line.split(" "):
+    # if block_last_line.strip().split(" ")[0] in ("else", "if"):
+    #     # if get_block_type(block_last_line.strip()) == 1:
+    #     if "then" in block_last_line.split(" "): # and not block_last_line.strip().endswith(" then"):
+    #         then_split = block_last_line.split(" then")
+    #         if then_split[1] and not then_split[1].strip().startswith("'"):
+    #             return False
+    #     return True
+
+    if else_regex.findall(block_last_line):
         return True
     return False
 
@@ -65,16 +80,22 @@ def to_code_blocks(brs_text):
 def get_block_type(block):
     block = block.lower()
     words = block.replace("\n", " ").strip().split(" ")
-    # if "if" not in words and "else" not in words:
-    # print("BLOCK: ", block, "FIRST WORD:", words[0])
+
     if words[0] not in ["if", "else"]:
+    # if not if_regex.findall(block) and not else_regex.findall(block):
         return 0  # Normal block of code
 
     first_line = block.split("\n", 1)[0]
-    if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1:
-        then_split = first_line.strip().split(" then")
-        if then_split[1] and not then_split[1].strip().startswith("'"):
-            return 1  # Inline if
+    if len(if_regex.findall(first_line)) == 1 and len(then_regex.findall(first_line)) == 1:
+        # print("abc", re.split(then_regex_pattern, first_line))
+        # print(then_regex.split(first_line))
+        if then_regex.split(first_line)[1]:
+            return 1
+
+    # if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1:
+    #     then_split = first_line.strip().split(" then")
+    #     if then_split[1] and not then_split[1].strip().startswith("'"):
+    #         return 1  # Inline if
 
     return 2  # Normal if/else
 
@@ -85,46 +106,25 @@ def get_line_count(block):
 
 def transform_inline_if(component_name, block, line_num):
     line_count = get_line_count(block)
-    words = block.lower().replace("\n", " ").split(" ")
+    # words = block.lower().replace("\n", " ").split(" ")
     coverage_line = coverage_line_template.format(component_name, line_num, line_count)
-    if "if" in words and "then" in words and "else" in words:
-        return coverage_line + "\n" + block
-    then_split = re.split(" then ", block, flags=re.IGNORECASE)
+    # if "if" in words and "then" in words and "else" in words:
+    if else_regex.findall(block):
+        return coverage_line + "\n" + block, \
+               [line_num + extra_line for extra_line in range(line_count)]
+    then_split = then_regex.split(block)
     return "\n".join([then_split[0],
                       coverage_line,
                       then_split[1],
                       (len(block) - len(block.lstrip(' '))) * " " + "end if"]), \
            [line_num + extra_line for extra_line in range(line_count)]
 
-    # # print("block:", block)
-    # if " then return " in block.lower():
-    #     # then_split = block.split("then return ")
-    #     then_split = re.split("then return ", block, flags=re.IGNORECASE)
-    #     line_count = get_line_count(then_split[1])
-    #     extra_function = extra_function_template.format(component_name, line_num,
-    #                                                     component_name, line_num, line_count,
-    #                                                     then_split[1])
-    #     then_split[1] = "{}_markLine{}()".format(component_name, line_num)
-    #     return \
-    #         "then return ".join(then_split), \
-    #         extra_function, \
-    #         [line_num + extra_line for extra_line in range(line_count)]
-    #
-    # then_split = re.split(" then ", block, flags=re.IGNORECASE)
-    # # print("split", then_split)
-    # line_count = get_line_count(then_split[1])
-    # extra_function = extra_sub_template.format(component_name, line_num,
-    #                                            component_name, line_num, line_count,
-    #                                            then_split[1])
-    # then_split[1] = "{}_markLine{}()".format(component_name, line_num)
-    # return " then ".join(then_split), extra_function, [line_num + extra_line for extra_line in range(line_count)]
-
 
 coverage_line_template = "{}_markTestCoverage({}, {})"
 
 
 def transform_block(component_name, block, line_num):
-    # print(">>>\n", block, "\n<<<")
+    print(">>>\n", block, "\n<<<")
     if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
         return block, []
     block_type = get_block_type(block)
@@ -146,9 +146,9 @@ def transform_block(component_name, block, line_num):
 
 
 mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
-  for i = 0 to line_num - 1
-    index = (startingIndex + lineCount).toStr()
-    m.global.testCoverage.{0}.[index] += 1
+  for i = 0 to lineCount - 1
+    index = (startingIndex + i).toStr()
+    m.global.testCoverage.{0}[index] += 1
   end for
 end sub
 """
@@ -158,7 +158,7 @@ def transform_component(component_file):
     global coverage_dir
     local_file_path = component_file.replace(coverage_dir, "")
     component_raw = open(component_file, 'r').read()
-    component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
+    # component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
     component_name = "_".join(filter(len, local_file_path.split(".")[0].split(os.sep))).replace("-", "_")
 
     hashed = md5(component_raw.encode('utf-8')).hexdigest()
@@ -204,7 +204,7 @@ main_component_lines = """
 
 report_coverage_lines = """
     sourceFilesAA = []
-    for each componentName in testCoverageComponent
+    for each componentName in testCoverageComponents
       componentCoverage = m.global.testCoverage[componentName]
       coverage = []
       for i = 1 to componentCoverage.length
