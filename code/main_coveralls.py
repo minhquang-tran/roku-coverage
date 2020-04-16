@@ -5,23 +5,36 @@ from distutils.dir_util import copy_tree
 from hashlib import md5
 from subprocess import Popen, PIPE
 
-comment_regex_pattern = "'(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
-if_regex_pattern = "(?:^| )if (?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
-if_regex = re.compile(if_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
-then_regex_pattern = "(?:^| )then(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
-then_regex = re.compile(then_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
-else_regex_pattern = "(?:^| )else(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
-else_regex = re.compile(else_regex_pattern, flags=re.IGNORECASE | re.MULTILINE)
+if_regex = re.compile(r"(?<=:^| )if(?= )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
+then_regex = re.compile(r"(?<=: )then(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
+else_regex = re.compile(r"(?<=:^| )else(?:$| )(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
+function_regex = re.compile(r"(?<!end |   \W)function(?= ?\()(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE)
+end_function_regex = re.compile(r"(?<!\w)end function(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")
 
 
 def is_balanced(block):
+    block = "\n".join(map(uncommented_line, block.split("\n")))
     if block.count("(") != block.count(")"):
         return False
     if block.count("{") != block.count("}"):
         return False
     if block.count("[") != block.count("]"):
         return False
+    if len(function_regex.findall(block)) > len(end_function_regex.findall(block)) \
+            and not block.strip().startswith("function"):
+        return False
     return True
+
+
+def uncommented_line(line):
+    opened = False
+    for pos in range(len(line)):
+        char = line[pos]
+        if char == '\"':
+            opened = not opened
+        if char == '\'' and not opened:
+            return line[:pos]
+    return line
 
 
 def should_add_into_current_block(code_block):
@@ -43,7 +56,7 @@ def should_add_into_current_block(code_block):
             return False
         return True
 
-    uncommented = re.split(comment_regex_pattern, block_last_line, 1)[0]
+    uncommented = uncommented_line(block_last_line) #re.split(comment_regex_pattern, block_last_line, 1)[0]
     if if_regex.findall(uncommented) or else_regex.findall(uncommented):
         then_split = then_regex.split(uncommented)
         if len(then_split) > 1 and then_split[-1]:
@@ -81,15 +94,15 @@ def get_block_type(block):
     block = block.lower()
     words = block.replace("\n", " ").strip().split(" ")
 
-    if words[0] not in ["if", "else"]:
-    # if not if_regex.findall(block) and not else_regex.findall(block):
+    # if words[0] not in ["if", "else"]:
+    first_line = uncommented_line(block.split("\n", 1)[0])
+    if not first_line.strip().startswith("if ") and first_line.strip() != "else":
         return 0  # Normal block of code
 
-    first_line = block.split("\n", 1)[0]
-    if len(if_regex.findall(first_line)) == 1 and len(then_regex.findall(first_line)) == 1:
+    if first_line.strip().startswith("if ") and len(then_regex.findall(first_line)) == 1:
         # print("abc", re.split(then_regex_pattern, first_line))
         # print(then_regex.split(first_line))
-        if then_regex.split(first_line)[1]:
+        if then_regex.split(first_line)[1].strip():
             return 1
 
     # if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1:
@@ -104,10 +117,13 @@ def get_line_count(block):
     return block.count("\n") + 1
 
 
+coverage_line_template = "{}_markTestCoverage({})"
+
+
 def transform_inline_if(component_name, block, line_num):
     line_count = get_line_count(block)
     # words = block.lower().replace("\n", " ").split(" ")
-    coverage_line = coverage_line_template.format(component_name, line_num, line_count)
+    coverage_line = coverage_line_template.format(component_name, list(range(line_num, line_num + line_count)))
     # if "if" in words and "then" in words and "else" in words:
     if else_regex.findall(block):
         return coverage_line + "\n" + block, \
@@ -120,33 +136,31 @@ def transform_inline_if(component_name, block, line_num):
            [line_num + extra_line for extra_line in range(line_count)]
 
 
-coverage_line_template = "{}_markTestCoverage({}, {})"
-
-
 def transform_block(component_name, block, line_num):
     print(">>>\n", block, "\n<<<")
     if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
         return block, []
     block_type = get_block_type(block)
+    print("TYPE", block_type)
     if block_type == 0:
         line_count = get_line_count(block)
         return \
-            coverage_line_template.format(component_name, line_num, line_count) + "\n" + block, \
+            coverage_line_template.format(component_name, list(range(line_num, line_num + line_count))) + "\n" + block, \
             [line_num + extra_line for extra_line in range(line_count)]
     if block_type == 1:
         return transform_inline_if(component_name, block, line_num)
 
     line_split = block.split("\n", 1)
     # print("line_split", line_split)
-    line_split[0] += "\n" + coverage_line_template.format(component_name, line_num, 1)
+    line_split[0] += "\n" + coverage_line_template.format(component_name, [line_num])
     block_covered_lines = [line_num]
     line_split[1], covered_lines = transform_block(component_name, line_split[1], line_num + 1)
     block_covered_lines += covered_lines
     return "\n".join(line_split), block_covered_lines
 
 
-mark_test_function_template = """sub {0}_markTestCoverage(startingIndex, lineCount)
-  for i = 0 to lineCount - 1
+mark_test_function_template = """sub {0}_markTestCoverage(indices)
+  for each i in indices
     index = (startingIndex + i).toStr()
     m.global.testCoverage.{0}[index] += 1
   end for
