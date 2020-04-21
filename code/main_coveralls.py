@@ -5,7 +5,7 @@ from distutils.dir_util import copy_tree
 from hashlib import md5
 from subprocess import Popen, PIPE
 
-if_regex = re.compile(r"(?<!\w)if(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
+if_regex = re.compile(r"(?<!end |...\w)if(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 then_regex = re.compile(r"(?<!\w)then(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 else_regex = re.compile(r"(?<!\w)else(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 function_regex = re.compile(r"(?<!end |...\w)function(?= ?\()(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE)
@@ -58,7 +58,7 @@ def should_add_into_current_block(code_block):
 
     uncommented = uncommented_line(block_last_line)
     if if_regex.findall(uncommented) or else_regex.findall(uncommented):
-        then_split = then_regex.split(uncommented)
+        then_split = then_regex.split(uncommented.strip())
         if len(then_split) > 1 and then_split[-1]:
             return False
         return True
@@ -114,18 +114,6 @@ def get_line_count(block):
 coverage_line_template = "{}_markTestCoverage({})"
 
 
-# def transform_inline_if(component_name, block, line_num):
-#     line_count = get_line_count(block)
-#     coverage_line = coverage_line_template.format(component_name, list(range(line_num, line_num + line_count)))
-#
-#     then_split = then_regex.split(block)
-#     return "\n".join([then_split[0],
-#                       coverage_line,
-#                       then_split[1],
-#                       (len(block) - len(block.lstrip(' '))) * " " + "end if"]), \
-#            [line_num + extra_line for extra_line in range(line_count)]
-
-
 def transform_block(component_name, block, line_num):
     print(">>>\n", block, "\n<<<")
     if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
@@ -164,6 +152,18 @@ end sub
 """
 
 
+def transform_raw(component_name, code_raw, starting_line_num):
+    line_num = starting_line_num
+    transformed_blocks = []
+    component_covered_lines = []
+    for block in to_code_blocks(code_raw):
+        transformed_block, covered_lines = transform_block(component_name, block, line_num)
+        transformed_blocks.append(transformed_block)
+        component_covered_lines += covered_lines
+        line_num += get_line_count(block)
+    return transformed_blocks, component_covered_lines, line_num
+
+
 def transform_component(component_file):
     global coverage_dir
     local_file_path = component_file.replace(coverage_dir, "")
@@ -174,15 +174,7 @@ def transform_component(component_file):
     hashed = md5(component_raw.encode('utf-8')).hexdigest()
     print("------------------------\nTransforming component: " + local_file_path)
 
-    line_num = 1
-    transformed_blocks = []
-    component_covered_lines = []
-    for block in to_code_blocks(component_raw):
-        transformed_block, covered_lines = transform_block(component_name, block, line_num)
-        transformed_blocks.append(transformed_block)
-        component_covered_lines += covered_lines
-        line_num += block.count("\n") + 1
-
+    transformed_blocks, component_covered_lines, line_num = transform_raw(component_name, component_raw, 1)
     mark_test_function = mark_test_function_template.format(component_name)
 
     with open(component_file, 'w') as file_object:
