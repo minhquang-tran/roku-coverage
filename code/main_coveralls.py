@@ -13,15 +13,18 @@ end_function_regex = re.compile(r"(?<!\w)end function(?!\w)(?=(?:[^\"]*\"[^\"]*\
 
 
 def is_balanced(block):
-    block = "\n".join(map(uncommented_line, block.split("\n")))
-    if block.count("(") != block.count(")"):
+    if type(block) is list:
+        uncommented = "\n".join(map(uncommented_line, block))
+    else:
+        uncommented = "\n".join(map(uncommented_line, block.split("\n")))
+    if uncommented.count("(") != uncommented.count(")"):
         return False
-    if block.count("{") != block.count("}"):
+    if uncommented.count("{") != uncommented.count("}"):
         return False
-    if block.count("[") != block.count("]"):
+    if uncommented.count("[") != uncommented.count("]"):
         return False
-    if len(function_regex.findall(block)) > len(end_function_regex.findall(block)) \
-            and not block.strip().startswith("function"):
+    if len(function_regex.findall(uncommented)) > len(end_function_regex.findall(uncommented)) \
+            and not uncommented.strip().startswith("function"):
         return False
     return True
 
@@ -58,7 +61,7 @@ def should_add_into_current_block(code_block):
 
     uncommented = uncommented_line(block_last_line)
     if if_regex.findall(uncommented) or else_regex.findall(uncommented):
-        then_split = then_regex.split(uncommented.strip())
+        then_split = then_regex.split(uncommented)
         if len(then_split) > 1 and then_split[-1]:
             return False
         return True
@@ -68,8 +71,9 @@ def should_add_into_current_block(code_block):
     return False
 
 
-def to_code_blocks(brs_text):
-    lines = brs_text.split("\n")
+def to_code_blocks(lines):
+    if type(lines) is not list:
+        lines = lines.split("\n")
     blocks = []
     for line in lines:
         if not blocks:
@@ -84,25 +88,18 @@ def to_code_blocks(brs_text):
 
 def get_block_type(block):
     block = block.lower()
-    words = block.replace("\n", " ").strip().split(" ")
 
-    # if words[0] not in ["if", "else"]:
     first_line = uncommented_line(block.split("\n", 1)[0])
-    if not if_regex.findall(first_line) and not else_regex.findall(first_line):
+    if not first_line.strip().startswith("if ") and first_line.strip() != "else":
         return 0  # Normal block of code
 
     if first_line.strip().startswith("if "):
         then_split = then_regex.split(block, 1)
-        print("then_split", then_split)
+        # print("then_split", then_split)
         if len(then_split) > 1 and then_split[1].split("\n")[0].strip():
             if else_regex.findall(then_split[1]):
-                return 0
-            return 1  # Inline if then (else)
-
-    # if first_line.split(" ").count("if") == 1 and first_line.split(" ").count("then") == 1:
-    #     then_split = first_line.strip().split(" then")
-    #     if then_split[1] and not then_split[1].strip().startswith("'"):
-    #         return 1  # Inline if
+                return 0 # Inline if then
+            return 1  # Inline if then else
 
     return 2  # Normal if/else
 
@@ -111,28 +108,77 @@ def get_line_count(block):
     return block.count("\n") + 1
 
 
+def get_function_ranges(block):
+    captured_blocks = []
+    function_start_index = -1
+
+    processing_block = []
+    capturing = False
+    lines = block.split("\n")
+    for index in range(len(lines)):
+        line = lines[index]
+        uncommented = uncommented_line(line)
+        if end_function_regex.findall(uncommented) and is_balanced(processing_block):
+            captured_blocks.append((function_start_index, index))
+            capturing = False
+        if function_regex.findall(uncommented) and not capturing:
+            processing_block = []
+            function_start_index = index + 1
+            capturing = True
+            continue
+        if capturing:
+            processing_block.append(line)
+
+    return captured_blocks
+
+
+def process_anonymous_functions(component_name, block, starting_line):
+    lines = block.split("\n")
+    local_covered_lines = list(range(starting_line, starting_line + get_line_count(block)))
+    captured_blocks = get_function_ranges(block)
+
+    if not captured_blocks:
+        return block, local_covered_lines, local_covered_lines
+
+    block_covered_lines = local_covered_lines
+
+    for start_index, end_index in reversed(captured_blocks):
+        function_line_range = range(starting_line + start_index, starting_line + end_index)
+        local_covered_lines = [line_num for line_num in local_covered_lines if line_num not in function_line_range]
+        function_lines = lines[start_index:end_index]
+        transformed_blocks, function_covered_lines, _\
+            = transform_lines(component_name, function_lines, function_line_range[0])
+        block_covered_lines = sorted(local_covered_lines + function_covered_lines)
+        lines = lines[:start_index] + transformed_blocks + lines[end_index:]
+
+    return "\n".join(lines), local_covered_lines, block_covered_lines
+
+
 coverage_line_template = "{}_markTestCoverage({})"
 
 
 def transform_block(component_name, block, line_num):
-    print(">>>\n", block, "\n<<<")
+    # print(">>>\n", block, "\n<<<")
     if not block.strip() or block.strip().lower().startswith(("'", "end ", "sub ", "function ")):
         return block, []
     block_type = get_block_type(block)
-    print("TYPE", block_type)
-    line_count = get_line_count(block)
-    coverage_line = coverage_line_template.format(component_name, list(range(line_num, line_num + line_count)))
+    # print("TYPE", block_type)
     if block_type == 0:
+        block, local_covered_lines, block_covered_lines = process_anonymous_functions(component_name, block, line_num)
+        coverage_line = coverage_line_template.format(component_name, local_covered_lines)
         return \
             coverage_line + "\n" + block, \
-            [line_num + extra_line for extra_line in range(line_count)]
+            block_covered_lines
     if block_type == 1:
         then_split = then_regex.split(block)
+        processed_statements, local_covered_lines, block_covered_lines \
+            = process_anonymous_functions(component_name, then_split[1], line_num)
+        coverage_line = coverage_line_template.format(component_name, local_covered_lines)
         return "\n".join([then_split[0],
                           coverage_line,
-                          then_split[1],
+                          processed_statements,
                           "end if"]), \
-               [line_num + extra_line for extra_line in range(line_count)]
+               block_covered_lines
 
     line_split = block.split("\n", 1)
     # print("line_split", line_split)
@@ -152,7 +198,7 @@ end sub
 """
 
 
-def transform_raw(component_name, code_raw, starting_line_num):
+def transform_lines(component_name, code_raw, starting_line_num):
     line_num = starting_line_num
     transformed_blocks = []
     component_covered_lines = []
@@ -164,8 +210,7 @@ def transform_raw(component_name, code_raw, starting_line_num):
     return transformed_blocks, component_covered_lines, line_num
 
 
-def transform_component(component_file):
-    global coverage_dir
+def transform_component(component_file, coverage_dir):
     local_file_path = component_file.replace(coverage_dir, "")
     component_raw = open(component_file, 'r').read()
     # component_name = component_file.split(os.sep)[-1].split(".")[0].replace("-", "_")
@@ -174,7 +219,7 @@ def transform_component(component_file):
     hashed = md5(component_raw.encode('utf-8')).hexdigest()
     print("------------------------\nTransforming component: " + local_file_path)
 
-    transformed_blocks, component_covered_lines, line_num = transform_raw(component_name, component_raw, 1)
+    transformed_blocks, component_covered_lines, line_num = transform_lines(component_name, component_raw, 1)
     mark_test_function = mark_test_function_template.format(component_name)
 
     with open(component_file, 'w') as file_object:
@@ -275,7 +320,7 @@ component_files.sort()
 # transforming component files
 components = []
 for component_file in component_files:
-    components.append(transform_component(component_file))
+    components.append(transform_component(component_file, coverage_dir))
 
 # transforming main.brs file
 transform_main(main_file, components)
