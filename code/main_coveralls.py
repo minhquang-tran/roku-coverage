@@ -258,7 +258,7 @@ report_coverage_lines = """
     coverallsRequest.initClientCertificates()
     coverallsRequest.setUrl("https://coveralls.io/api/v1/jobs")    
    
-    result = coverallsRequest.PostFromFile("tmp:/coverage.json")
+    result = coverallsRequest.postFromString("json=" + formatJson(coverageJsonRaw))
     ?">>Coveralls result:", result"""
 
 
