@@ -5,7 +5,7 @@ from distutils.dir_util import copy_tree
 from hashlib import md5
 from subprocess import Popen, PIPE
 
-if_regex = re.compile(r"(?<!end |...\w)if(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
+# if_regex = re.compile(r"(?<!end |...\w)if(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 then_regex = re.compile(r"(?<!\w)then(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 else_regex = re.compile(r"(?<!\w)else(?!\w)(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE | re.MULTILINE)
 function_regex = re.compile(r"(?<!end |...\w)function(?= ?\()(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", flags=re.IGNORECASE)
@@ -59,17 +59,6 @@ def should_add_into_current_block(code_block):
             return False
         return True
 
-    uncommented = uncommented_line(block_last_line)
-    if if_regex.findall(uncommented) or else_regex.findall(uncommented):
-        then_split = then_regex.split(uncommented)
-        if len(then_split) > 1 and then_split[-1]:
-            return False
-        return True
-
-    if else_regex.findall(block_last_line):
-        return True
-    return False
-
 
 def to_code_blocks(lines):
     if type(lines) is not list:
@@ -87,18 +76,18 @@ def to_code_blocks(lines):
 
 
 def get_block_type(block):
-    block = block.lower()
+    # block = block.lower()
 
-    first_line = uncommented_line(block.split("\n", 1)[0])
-    if not first_line.strip().startswith("if ") and first_line.strip() != "else":
+    block = "\n".join(map(uncommented_line, block.split("\n"))).lower().strip()
+    if not block.startswith(("if ", "for ", "else if ")) and block != "else":
         return 0  # Normal block of code
 
-    if first_line.strip().startswith("if "):
+    if block.strip().startswith("if "):
         then_split = then_regex.split(block, 1)
         # print("then_split", then_split)
         if len(then_split) > 1 and then_split[1].split("\n")[0].strip():
             if else_regex.findall(then_split[1]):
-                return 0 # Inline if then
+                return 0  # Inline if then
             return 1  # Inline if then else
 
     return 2  # Normal if/else
@@ -180,19 +169,14 @@ def transform_block(component_name, block, line_num):
                           "end if"]), \
                block_covered_lines
 
-    line_split = block.split("\n", 1)
-    # print("line_split", line_split)
-    line_split[0] += "\n" + coverage_line_template.format(component_name, [line_num])
-    block_covered_lines = [line_num]
-    line_split[1], covered_lines = transform_block(component_name, line_split[1], line_num + 1)
-    block_covered_lines += covered_lines
-    return "\n".join(line_split), block_covered_lines
+    covered_lines = list(range(line_num, line_num + get_line_count(block)))
+    coverage_line = coverage_line_template.format(component_name, covered_lines)
+    return block + "\n" + coverage_line, covered_lines
 
 
 mark_test_function_template = """sub {0}_markTestCoverage(indices)
   for each i in indices
-    index = (startingIndex + i).toStr()
-    m.global.testCoverage.{0}[index] += 1
+    m.global.testCoverage.{0}[i.toStr()] += 1
   end for
 end sub
 """
@@ -224,7 +208,7 @@ def transform_component(component_file, coverage_dir):
 
     with open(component_file, 'w') as file_object:
         file_object.write("\n".join([mark_test_function] + transformed_blocks))
-
+    # print(component_name, component_covered_lines)
     return component_name, local_file_path, line_num - 1, component_covered_lines, hashed
 
 
@@ -264,14 +248,18 @@ report_coverage_lines = """
       }})
     end for
     coverageJsonRaw = {{
-      "service_job_id": "{}"
-      "service_name": "circle-ci"
+      "repo_token": "{}"
       "source_files": sourceFilesAA
     }}
-
+    
     coverallsRequest = CreateObject("roUrlTransfer")
-    coverallsRequest.setUrl("https://coveralls.io/api/v1/jobs")
-    coverallsRequest.AsyncPostFromString("json=" + formatJson(coverageJsonRaw))"""
+    coverallsRequest.AddHeader("X-Roku-Reserved-Dev-Id", "")
+    coverallsRequest.setCertificatesFile("common:/certs/ca-bundle.crt")
+    coverallsRequest.initClientCertificates()
+    coverallsRequest.setUrl("https://coveralls.io/api/v1/jobs")    
+   
+    result = coverallsRequest.PostFromFile("tmp:/coverage.json")
+    ?">>Coveralls result:", result"""
 
 
 def transform_main(main_file, components):
@@ -308,7 +296,7 @@ print("Finished.")
 component_files = []
 main_file = None
 for root, dirs, files in os.walk(coverage_dir):
-    if "tests" in root or "tasks" in root:  # TODO: check for tasks
+    if "tests" in root or "tasks" in root or "app" in root:  # TODO: check for tasks
         continue
     for name in files:
         if "source" in root and name == "main.brs":
@@ -327,8 +315,8 @@ transform_main(main_file, components)
 
 print("DONE")
 
-# os.environ["ROKU_DEV_TARGET"] = "192.168.2.2"
-# os.environ["DEVPASSWORD"] = "aaaa"
-# sp = Popen(["make", "install"], cwd=coverage_dir, stdin=PIPE)
-# sp.stdin.write(b'\n')
-# sp.wait()
+os.environ["ROKU_DEV_TARGET"] = "192.168.2.2"
+os.environ["DEVPASSWORD"] = "aaaa"
+sp = Popen(["make", "install"], cwd=coverage_dir, stdin=PIPE)
+sp.stdin.write(b'\n')
+sp.wait()
